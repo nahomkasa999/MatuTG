@@ -67,8 +67,11 @@ bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(
     chatId,
-    `Welcome! To access the Matu Channel, please make your payment and then send a screenshot of your payment confirmation (the transaction slip) here.
-After sending the screenshot, please await admin approval. We will review your payment manually.`
+    `Welcome to the Matu Channel! Get access to exclusive, up-to-date worksheets that are almost identical to real exam questions.
+
+    To join, simply make a payment of 200 Birr per month.
+    
+    Once you've paid, send a screenshot of your payment confirmation (the transaction slip) directly to this chat. We'll review it manually and grant you immediate access.`
   );
 });
 
