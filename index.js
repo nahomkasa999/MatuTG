@@ -2,6 +2,7 @@ require("dotenv").config(); // Load environment variables from .env file
 
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose"); // Import Mongoose
+const http = require('http'); // Import http module for making requests
 
 // --- IMPORTANT: Configure these ---
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN; // Get this from @BotFather
@@ -9,16 +10,12 @@ const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID; // Your personal Telegram Chat 
 const CHANNEL_ID = process.env.CHANNEL_ID; // Your "Matu Channel" ID (e.g., -1001234567890)
 const MONGODB_URI = process.env.MONGODB_URI; // MongoDB connection string
 
-// --- Basic Validation and Logging on Startup ---
-console.log("--- BOT STARTUP CONFIGURATION ---");
-console.log(
-  "TELEGRAM_BOT_TOKEN (first part):",
-  TOKEN ? TOKEN.split(":")[0] : "Not Set"
-);
-console.log("ADMIN_CHAT_ID loaded:", ADMIN_CHAT_ID);
-console.log("CHANNEL_ID loaded:", CHANNEL_ID);
-console.log("MONGODB_URI loaded:", MONGODB_URI ? "Set" : "Not Set");
-console.log("--- END STARTUP CONFIGURATION ---");
+// The URL of your deployed application. This is used by the bot itself
+// to send periodic requests to its own server endpoint to keep it awake
+// on hosting platforms like Render.
+// You MUST set this in your .env file to your actual deployed URL (e.g., https://your-app-name.onrender.com).
+// If running locally for testing, you can use 'http://localhost:3000'.
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
 
 if (!TOKEN || !ADMIN_CHAT_ID || !CHANNEL_ID || !MONGODB_URI) {
   console.error(
@@ -30,7 +27,7 @@ if (!TOKEN || !ADMIN_CHAT_ID || !CHANNEL_ID || !MONGODB_URI) {
 // --- MongoDB Connection ---
 mongoose
   .connect(MONGODB_URI)
-  .then(() => console.log("MongoDB connected successfully!"))
+  .then(() => {}) // Removed console.log
   .catch((err) => {
     console.error("MongoDB connection error:", err);
     process.exit(1); // Exit if DB connection fails
@@ -52,7 +49,6 @@ const Member = mongoose.model("Member", memberSchema);
 
 // --- Initialize Telegram Bot ---
 const bot = new TelegramBot(TOKEN, { polling: true });
-console.log("Bot has started...");
 
 // --- Utility function to escape Markdown (legacy) special characters ---
 function escapeMarkdown(text) {
@@ -109,8 +105,6 @@ bot.on("photo", async (msg) => {
   const photo = msg.photo[msg.photo.length - 1];
   const fileId = photo.file_id;
 
-  console.log(`Received photo from user ${username} (${userId})`);
-
   // Notify user that screenshot is being reviewed
   await bot.sendMessage(
     chatId,
@@ -135,9 +129,6 @@ Please verify payment and click a button below.
 Original message ID: ${msg.message_id} in chat ${chatId}`,
       reply_markup: inlineKeyboard, // Attach the inline keyboard
     });
-    console.log(
-      `Photo forwarded to admin ${ADMIN_CHAT_ID} with action buttons.`
-    );
   } catch (error) {
     console.error(`Failed to forward photo to admin:`, error.message);
     bot.sendMessage(
@@ -188,9 +179,7 @@ async function handleApproval(
               "specific new message content and reply markup are exactly the same"
             )
           ) {
-            console.warn(
-              `Ignoring redundant edit for message ${messageIdToEdit} in chat ${adminChatId} (already active status).`
-            );
+            // Ignore redundant edit
           } else {
             console.error(
               `Error editing admin message for existing active user ${targetUserId}:`,
@@ -210,10 +199,7 @@ async function handleApproval(
           { parse_mode: "Markdown" }
         );
       } catch (userNotifyError) {
-        console.warn(
-          `Could not notify user ${targetUserId} about existing subscription (user may have blocked bot):`,
-          userNotifyError.message
-        );
+        // User may have blocked bot
       }
       return; // Exit the function as the user is already active
     }
@@ -235,10 +221,6 @@ async function handleApproval(
       { userId: String(targetUserId) },
       { expiryTimestamp, status: "active", joinedAt: new Date() },
       { upsert: true, new: true }
-    );
-
-    console.log(
-      `User ${targetUserId} added/updated in MongoDB with expiry: ${expiryDate.toLocaleString()}`
     );
 
     // Send the invite link to the approved user
@@ -277,9 +259,7 @@ Your access will expire on *${escapedExpiryDate}*. Thank you for choosing us!`,
             "specific new message content and reply markup are exactly the same"
           )
         ) {
-          console.warn(
-            `Ignoring redundant edit for message ${messageIdToEdit} in chat ${adminChatId} (approved status).`
-          );
+          // Ignore redundant edit
         } else {
           console.error(
             `Error editing admin message after approval for user ${targetUserId}:`,
@@ -290,8 +270,6 @@ Your access will expire on *${escapedExpiryDate}*. Thank you for choosing us!`,
     } else {
       await bot.sendMessage(adminChatId, confirmationMessage);
     }
-
-    console.log(`Invite link sent to user ${targetUserId}`);
   } catch (error) {
     console.error(`Failed to approve user ${targetUserId}:`, error);
 
@@ -323,9 +301,7 @@ Your access will expire on *${escapedExpiryDate}*. Thank you for choosing us!`,
             "specific new message content and reply markup are exactly the same"
           )
         ) {
-          console.warn(
-            `Ignoring redundant edit for message ${messageIdToEdit} in chat ${adminChatId} (approval failed status).`
-          );
+          // Ignore redundant edit
         } else {
           console.error(
             `Error editing admin message after failed approval for user ${targetUserId}:`,
@@ -348,9 +324,6 @@ async function handleDecline(
   try {
     // Optional: Remove user from DB or mark as declined
     await Member.deleteOne({ userId: String(targetUserId) }); // Removes the user's entry from the DB
-    console.log(
-      `User ${targetUserId} removed from DB after decline (if they were present).`
-    );
 
     await bot.sendMessage(
       targetUserId,
@@ -383,9 +356,7 @@ async function handleDecline(
             "specific new message content and reply markup are exactly the same"
           )
         ) {
-          console.warn(
-            `Ignoring redundant edit for message ${messageIdToEdit} in chat ${adminChatId} (declined status).`
-          );
+          // Ignore redundant edit
         } else {
           console.error(
             `Error editing admin message after decline for user ${targetUserId}:`,
@@ -396,8 +367,6 @@ async function handleDecline(
     } else {
       await bot.sendMessage(adminChatId, confirmationMessage);
     }
-
-    console.log(`User ${targetUserId} declined`);
   } catch (error) {
     console.error(`Failed to decline user ${targetUserId}:`, error.message);
     const errorMessage = `Failed to decline user ${targetUserId}. Error: ${error.message}`;
@@ -422,11 +391,9 @@ async function handleDecline(
           editError.message &&
           editError.message.includes(
             "specific new message content and reply markup are exactly the same"
-          )
+            )
         ) {
-          console.warn(
-            `Ignoring redundant edit for message ${messageIdToEdit} in chat ${adminChatId} (decline failed status).`
-          );
+          // Ignore redundant edit
         } else {
           console.error(
             `Error editing admin message after failed decline for user ${targetUserId}:`,
@@ -463,10 +430,6 @@ bot.on("callback_query", async (query) => {
   const action = parts[0]; // "approve" or "decline"
   const targetUserId = parts[1]; // The user ID
 
-  console.log(
-    `Callback query received: Action: ${action}, Target User ID: ${targetUserId}`
-  );
-
   if (action === "approve_user") {
     await handleApproval(targetUserId, chatId, messageId);
   } else if (action === "decline_user") {
@@ -489,7 +452,6 @@ bot.onText(/\/approve_user (\d+)/, async (msg, match) => {
     );
   }
 
-  console.log(`Manual /approve_user command received for ${targetUserId}`);
   await handleApproval(targetUserId, adminChatId);
 });
 
@@ -504,13 +466,11 @@ bot.onText(/\/decline_user (\d+)/, async (msg, match) => {
     );
   }
 
-  console.log(`Manual /decline_user command received for ${targetUserId}`);
   await handleDecline(targetUserId, adminChatId);
 });
 
 // --- MongoDB: Function to check and remove expired members ---
 async function removeExpiredMembers() {
-  console.log("Running scheduled check for expired members...");
   const nowTimestamp = Math.floor(Date.now() / 1000); // Current Unix timestamp
 
   try {
@@ -521,14 +481,10 @@ async function removeExpiredMembers() {
     });
 
     if (expiredMembers.length === 0) {
-      console.log("No expired members found.");
       return;
     }
 
-    console.log(`Found ${expiredMembers.length} expired members.`);
-
     for (const member of expiredMembers) {
-      console.log(`Attempting to remove expired member: ${member.userId}`);
       try {
         // Use bot.banChatMember to remove the user from the Telegram channel/group.
         // This removes them and prevents re-joining without a new invite/unban.
@@ -551,9 +507,6 @@ async function removeExpiredMembers() {
         // Update the member's status in MongoDB to 'expired'
         member.status = "expired";
         await member.save(); // Save the updated document to the database
-        console.log(
-          `User ${member.userId} successfully removed from channel and marked as expired in DB.`
-        );
       } catch (error) {
         // Handle cases where the user might already not be a member (e.g., they left manually)
         if (
@@ -562,16 +515,12 @@ async function removeExpiredMembers() {
         ) {
           member.status = "expired"; // Mark as expired in DB even if Telegram says they're gone
           await member.save();
-          console.log(
-            `User ${member.userId} already not a member of the channel, marked as expired in DB.`
-          );
         } else {
           // Log other errors, e.g., bot doesn't have 'Ban Users' permission
           console.error(`Check bot permissions for banning:`, error.message);
         }
       }
     }
-    console.log("Finished checking for expired members.");
   } catch (dbError) {
     console.error("Error querying MongoDB for expired members:", dbError);
   }
@@ -585,6 +534,37 @@ const SCHEDULE_INTERVAL = 12 * 60 * 60 * 1000;
 // Run the check immediately when the bot starts, then repeatedly at the defined interval
 removeExpiredMembers(); // Initial run
 setInterval(removeExpiredMembers, SCHEDULE_INTERVAL);
+
+// --- Keep Server Running with Periodic Requests (Self-Ping) ---
+// This section creates a small HTTP server that your hosting platform can detect
+// and also sends periodic requests to itself to prevent the service from sleeping.
+const PORT = process.env.PORT || 3000; // Hosting platforms like Render will inject the PORT environment variable
+
+const server = http.createServer((req, res) => {
+    // This is a simple endpoint that can be hit by your hosting provider's health checks
+    // or by the bot's own self-ping mechanism.
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Matu Channel Bot is alive!\n');
+});
+
+server.listen(PORT, () => {
+    console.log(`Web server listening on port ${PORT}`);
+});
+
+const PING_INTERVAL = 50 * 1000; // 50 seconds in milliseconds
+
+setInterval(() => {
+    // Make an HTTP GET request to the SERVER_URL (which should be your deployed app's URL)
+    // This keeps the server active on platforms that might put it to sleep due to inactivity.
+    http.get(SERVER_URL, (res) => {
+        // Consume response data to free up memory
+        res.on('data', () => {});
+        res.on('end', () => {});
+    }).on('error', (e) => {
+        console.error(`Error during self-ping to ${SERVER_URL}: ${e.message}`);
+    });
+}, PING_INTERVAL);
+
 
 // --- General Error Handling for the Bot ---
 bot.on("polling_error", (error) => {
