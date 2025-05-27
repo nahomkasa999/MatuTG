@@ -68,8 +68,17 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     chatId,
     `Welcome to the Matu Channel! Get access to exclusive, up-to-date worksheets that are almost identical to real exam questions.
+      
+    This channel includes
+      - past exams 2017, 2016, 2015 ... 
+      - currently focus on mathematics only
+      - guaranted A-, A, and A+ -> we will return your money if you didn't get one,
+      - class room lecture videos
+      - 10/7 access to teachers and mentors 
+      - live exams
+      - and more 
 
-    To join, simply make a payment of 200 Birr per month.
+    To join, its 200birr per month.
     
     Once you've paid, send a screenshot of your payment confirmation (the transaction slip) directly to this chat. We'll review it manually and grant you immediate access.`
   );
